@@ -37,6 +37,7 @@ module BackupFu
 
     def run_ftp_command
       Net::FTP.open(@options[:host], @options[:user], @options[:password]) do |ftp|
+        ftp.chdir @options[:backup_dir]
         yield ftp if block_given?
       end
     end
