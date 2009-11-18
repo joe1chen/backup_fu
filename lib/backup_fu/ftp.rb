@@ -6,6 +6,42 @@ module BackupFu
   class FTPProvider
     def initialize(options={})
       check_config(options)
+      create_remote_backup_dir
+    end
+
+    def delete(file)
+      run_ftp_command do |ftp|
+        ftp.delete(file)
+      end
+    end
+
+    def put(file)
+      run_ftp_command do |ftp|
+        ftp.put(file)
+      end
+    end
+
+    def get(file, &block)
+      run_ftp_command do |ftp|
+        ftp.get(file, &block)
+      end
+    end
+
+    def list
+      run_ftp_command do |ftp|
+        ftp.list("*").map{|f| f.split(" ").last}
+      end
+    end
+
+    private
+
+    def run_ftp_command
+      Net::FTP.open(@options[:host], @options[:user], @options[:password]) do |ftp|
+        yield ftp if block_given?
+      end
+    end
+
+    def create_remote_backup_dir
       @ftp = Net::FTP.new(@options[:host], @options[:user], @options[:password])
       begin
         @ftp.chdir @options[:backup_dir]
@@ -13,25 +49,9 @@ module BackupFu
         @ftp.mkdir @options[:backup_dir]
         @ftp.chdir @options[:backup_dir]
       end
+      @ftp.close
     end
 
-    def delete(file)
-      @ftp.delete(file)
-    end
-
-    def put(file)
-      @ftp.put(file)
-    end
-
-    def get(file, &block)
-      @ftp.get(file, &block)
-    end
-
-    def list
-      @ftp.list("*").map{|f| f.split(" ").last}
-    end
-
-    private
     def check_config(options)
       @options = {}
       @options[:host] = options[:ftp_host]
