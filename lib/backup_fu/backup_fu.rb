@@ -180,12 +180,13 @@ module BackupFu
       locals  = Dir.glob("#{dump_base_path}/*")
 
       if count >= locals.length
-        puts "no old local backups to cleanup"
+        puts "No old local backups to cleanup"
       else
-        puts "keeping #{count} of #{locals.length} local backups"
+        puts "Keeping #{count} of #{locals.length} local backups"
 
-        files_to_remove = locals - locals.last(count)
+        files_to_remove = locals - locals.sort.last(count)
         files_to_remove.each do |f|
+          puts "Removing old backup file: #{f}" if @verbose
           File.delete(f)
         end
       end

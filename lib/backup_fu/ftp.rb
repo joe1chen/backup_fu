@@ -29,7 +29,7 @@ module BackupFu
 
     def list
       run_ftp_command do |ftp|
-        ftp.list("*").map{|f| f.split(" ").last}
+        ftp.nlst("*")
       end
     end
 
