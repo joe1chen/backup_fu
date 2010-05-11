@@ -338,13 +338,18 @@ module BackupFu
           `#{cmd}`
 
           path_num += 1
-
-          # GZIP
-          cmd = niceify "gzip -f #{static_compressed_path}"
-          puts "\nGzip: #{cmd}" if @verbose
-          `#{cmd}`
         end
       end
+      
+      if @fu_conf[:compressor] == 'zip'
+        #No-op
+      else
+        # GZIP
+        cmd = niceify "gzip -f #{static_compressed_path}"
+        puts "\nGzip: #{cmd}" if @verbose
+        `#{cmd}`
+      end
+      
     end
 
 
