@@ -330,7 +330,6 @@ module BackupFu
     end
 
 
-    # Add -j option to keep from preserving directory structure
     def zip_switches
       if(@fu_conf[:zip_password] && !@fu_conf[:zip_password].blank?)
         password_option = "-P #{@fu_conf[:zip_password]}"
@@ -338,7 +337,7 @@ module BackupFu
         password_option = ''
       end
 
-      "-j #{password_option}"
+      "#{password_option}"
     end
 
     def skips
