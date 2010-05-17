@@ -294,59 +294,36 @@ module BackupFu
       compressed_path = File.join(dump_base_path, db_filename_compressed)
 
       if(@fu_conf[:compressor] == 'zip')
-        cmd = niceify "zip #{zip_switches} #{compressed_path} #{dump_base_path}/#{db_filename}"
+        cmd = niceify "zip #{zip_switches} #{final_db_dump_path} #{dump_base_path}/#{db_filename}"
         puts "\nZip: #{cmd}\n" if @verbose
         `#{cmd}`
       else
-
-        # TAR it up
-        cmd = niceify "tar -cf #{compressed_path} -C #{dump_base_path} #{db_filename}"
-        puts "\nTar: #{cmd}\n" if @verbose
-        `#{cmd}`
-
-        # GZip it up
-        cmd = niceify "gzip -f #{compressed_path}"
-        puts "\nGzip: #{cmd}" if @verbose
+        # TAR.GZ it up
+        cmd = niceify "tar -czf #{final_db_dump_path} -C #{dump_base_path} #{db_filename}"
+        puts "\nTar/Gzip: #{cmd}\n" if @verbose
         `#{cmd}`
       end
     end
 
     def compress_static(paths)
-      path_num = 0
-      paths.each do |p|
+      paths = paths.map do |p|
         if p.first != '/'
           # Make into an Absolute path:
           p = File.join(RAILS_ROOT, p)
         end
+        %{"#{p}"}
+      end.join " "
 
-        puts "Static Path: #{p}" if @verbose
-
-        if @fu_conf[:compressor] == 'zip'
-          cmd = niceify "zip -r #{zip_switch} #{static_compressed_path} #{p}"
-          puts "\nZip: #{cmd}\n" if @verbose
-          `#{cmd}`
-        else
-          if path_num == 0
-            tar_switch = 'c'  # for create
-          else
-            tar_switch = 'r'  # for append
-          end
-
-          # TAR
-          cmd = niceify "tar -#{tar_switch}f #{static_compressed_path} #{p}"
-          puts "\nTar: #{cmd}\n" if @verbose
-          `#{cmd}`
-
-          path_num += 1
-        end
-      end
+      puts "Static Path: #{p}" if @verbose
       
       if @fu_conf[:compressor] == 'zip'
-        #No-op
+        cmd = niceify "zip -r #{zip_switches} #{static_compressed_path} #{paths}"
+        puts "\nZip: #{cmd}\n" if @verbose
+       `#{cmd}`
       else
-        # GZIP
-        cmd = niceify "gzip -f #{static_compressed_path}"
-        puts "\nGzip: #{cmd}" if @verbose
+        # TAR.GZ
+        cmd = niceify "tar -czf #{final_static_dump_path} #{paths}"
+        puts "\nTar/Gzip: #{cmd}\n" if @verbose
         `#{cmd}`
       end
       
