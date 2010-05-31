@@ -3,6 +3,7 @@ require 'active_support'
 require 'mime/types'
 require 'erb'
 require 'pp'
+require 'tempfile'
 
 module BackupFu
   class BackupFuConfigError < StandardError; end
@@ -104,24 +105,50 @@ module BackupFu
 
     # Don't count on being able to drop the database, but do expect to drop all tables
     def prepare_db_for_restore
-      raise "restore unimplemented for #{adapter}" unless (adapter = @db_conf[:adapter]) == 'postgresql'
-      query = "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'"
-      cmd = "psql #{@db_conf[:database]} -t -c \"#{query}\""
-      puts "Executing: '#{cmd}'"
-      tables = `#{cmd}`
-
-      query = "DROP TABLE #{tables.map(&:chomp).map(&:strip).reject(&:empty?).join(", ")} CASCADE"
-      cmd = "psql #{@db_conf[:database]} -t -c \"#{query}\""
-      puts "Executing: '#{cmd}'"
-      `#{cmd}`
+      #raise "restore unimplemented for #{adapter}" unless (adapter = @db_conf[:adapter]) == 'postgresql'
+      if (adapter = @db_conf[:adapter]) == 'postgresql'
+        query = "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'"
+        cmd = "psql #{@db_conf[:database]} -t -c \"#{query}\""
+        puts "Executing: '#{cmd}'"
+        tables = `#{cmd}`
+  
+        query = "DROP TABLE #{tables.map(&:chomp).map(&:strip).reject(&:empty?).join(", ")} CASCADE"
+        cmd = "psql #{@db_conf[:database]} -t -c \"#{query}\""
+        puts "Executing: '#{cmd}'"
+        `#{cmd}`
+      end
     end
 
     def restore_backup(key)
-      raise "Restore not implemented for #{@db_conf[:adapter]}" unless @db_conf[:adapter] == 'postgresql'
-      raise 'Restore not implemented for zip' if @fu_conf[:compressor] == 'zip'
+      
+      tmp_path = File.join(RAILS_ROOT, 'tmp')
 
-      restore_file_name = @fu_conf[:disable_compression] ? 'restore.sql' : 'restore.tar.gz'
-      restore_file = Tempfile.new(restore_file_name)
+      restore_file_name = nil
+      restore_file_name_unpacked = nil
+      unpack_cmd = nil
+      
+      if key =~ /(.*)\.tar\.gz/i
+        restore_file_name_unpacked = $1 + ".sql"
+        unpack_cmd = "tar xfz "
+      elsif key =~ /(.*)\.zip/i
+        restore_file_name_unpacked = $1 + ".sql"
+        unpack_cmd = "unzip "
+      else
+        if @fu_conf[:disable_compression]
+          restore_file_name_unpacked = key
+        else
+          raise 'Restore not implemented for unknown file type'
+        end
+      end
+
+      
+      # Change restore unpacked path to absolute path 
+      restore_file_name_unpacked = File.join(tmp_path, restore_file_name_unpacked) 
+      
+      restore_file_name = key
+      restore_file = File.new(File.join(tmp_path, restore_file_name),  "w+")
+
+      #restore_file = Tempfile.new(restore_file_name)
 
       open(restore_file.path, 'w') do |fh|
         puts "Fetching #{key} to #{restore_file.path}"
@@ -129,26 +156,34 @@ module BackupFu
           fh.write chunk
         end
       end
+      restore_file.close
 
-      if(@fu_conf[:disable_compression])
-        restore_file_unpacked = restore_file
-      else
-        restore_file_unpacked = Tempfile.new('restore.sql')
-
-        cmd = niceify "tar xfz #{restore_file.path} -O > #{restore_file_unpacked.path}"
-        puts "\nUntar: #{cmd}\n" if @verbose
+      if unpack_cmd
+        if key =~ /(.*)\.tar\.gz/i
+          # Tar
+          cmd = niceify "#{unpack_cmd} #{restore_file.path} -C #{tmp_path}/"
+        elsif key =~ /(.*)\.zip/i
+          # Zip
+          cmd = niceify "#{unpack_cmd} #{restore_file.path} -d #{tmp_path}/"
+        else
+          raise 'Restore not implemented for unknown file type'
+        end
+        
+        puts "\nUnpack: #{cmd}\n" if @verbose
         `#{cmd}`
       end
 
+      restore_file_unpacked = File.open(restore_file_name_unpacked, 'r')
+      puts "Restore file unpacked: #{restore_file_unpacked.path}"
+      
       prepare_db_for_restore
 
       # Do the actual restore
       case @db_conf[:adapter]
       when 'postgresql'
         cmd = niceify "export #{pgpassword_prefix} && #{restore_command_path} --clean #{sqlcmd_options} --dbname=#{@db_conf[:database]} #{restore_file_unpacked.path}"
-      # when 'mysql'
-      #   raise "restore unimplemented for #{}
-      #   cmd = niceify "mysql command goes here"
+      when 'mysql'
+        cmd = niceify "mysql #{sqlcmd_options} #{@db_conf[:database]} < #{restore_file_unpacked.path}"
       end
       puts "\nRestore: #{cmd}\n" if @verbose
       `#{cmd}`
