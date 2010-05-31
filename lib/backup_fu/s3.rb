@@ -7,6 +7,7 @@ module BackupFu
     def initialize(options={})
       check_config(options)
       @s3 = RightAws::S3.new(@options[:access_key_id], @options[:secret_access_key])
+      @s3interface = RightAws::S3Interface.new(@options[:access_key_id], @options[:secret_access_key])
       @s3_bucket = @s3.bucket(@options[:bucket], true, 'private')
     end
 
@@ -22,7 +23,7 @@ module BackupFu
     end
 
     def get(file, &block)
-      @s3.bucket(@options[:bucket]).get(key, &block)
+      @s3interface.get(@options[:bucket], file, {}, &block)
     end
 
     def list
